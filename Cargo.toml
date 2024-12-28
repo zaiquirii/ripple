@@ -1,0 +1,15 @@
+[package]
+name = "ripple"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+winit = { version = "0.30.5", features = ["rwh_05"] }
+env_logger = "0.11.5"
+log = "0.4.22"
+wgpu = "23.0.1"
+pollster = "0.4.0"
+macaw = "0.19.1"
+bytemuck = { version = "1.20.0", features = ["derive"] }
