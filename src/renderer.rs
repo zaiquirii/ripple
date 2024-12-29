@@ -1,7 +1,10 @@
 use std::sync::Arc;
+use macaw::{Mat4, vec3};
 use wgpu::util::DeviceExt;
 use winit::event::WindowEvent;
 use winit::window::Window;
+use crate::camera::{Camera, Projection};
+use crate::{camera, mesh};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -39,7 +42,14 @@ pub struct GfxState<'a> {
     window: Arc<Window>,
 
     render_pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
+    mesh_vertex_buffer: wgpu::Buffer,
+    mesh_index_buffer: wgpu::Buffer,
+    mesh_index_count: u32,
+
+    pub camera: Camera,
+    projection: Projection,
+    camera_buffer: wgpu::Buffer,
+    camera_bind_group: wgpu::BindGroup,
 }
 
 impl<'a> GfxState<'a> {
@@ -82,19 +92,68 @@ impl<'a> GfxState<'a> {
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
+
+        let fov_y = 90f32.to_radians();
+        let projection = Projection::new(size.width, size.height, fov_y, 0.1, 10.0);
+        let camera = Camera::new(vec3(0.0, 0.0, -1.0), vec3(0.0, 0.0, 0.0));
+        let camera_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Projection Matrix"),
+                contents: bytemuck::cast_slice(&camera.calc_matrix().to_cols_array()),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            }
+        );
+
+        let camera_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }
+            ],
+            label: Some("camera_bind_group_layout"),
+        });
+
+        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &camera_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: camera_buffer.as_entire_binding(),
+                }
+            ],
+            label: Some("camera_bind_group"),
+        });
+
         surface.configure(&device, &config);
-        let vertex_buffer = device.create_buffer_init(
+        let cube = mesh::cube();
+        let mesh_vertex_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(VERTICES),
+                contents: bytemuck::cast_slice(&cube.vertices),
                 usage: wgpu::BufferUsages::VERTEX,
+            }
+        );
+        let mesh_index_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(&cube.indices),
+                usage: wgpu::BufferUsages::INDEX,
             }
         );
 
         let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
         let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[],
+            bind_group_layouts: &[
+                &camera_bind_group_layout,
+            ],
             push_constant_ranges: &[],
         });
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -103,7 +162,7 @@ impl<'a> GfxState<'a> {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[Vertex::desc()],
+                buffers: &[mesh::vertex_desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -143,7 +202,14 @@ impl<'a> GfxState<'a> {
             config,
             size,
             render_pipeline,
-            vertex_buffer,
+            mesh_vertex_buffer,
+            mesh_index_buffer,
+            mesh_index_count: cube.indices.len() as u32,
+
+            camera,
+            projection,
+            camera_buffer,
+            camera_bind_group
         }
     }
 
@@ -157,6 +223,7 @@ impl<'a> GfxState<'a> {
             self.config.width = new_size.width;
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
+            self.projection.resize(new_size.width, new_size.height);
         }
     }
 
@@ -165,6 +232,9 @@ impl<'a> GfxState<'a> {
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+        let matrix = self.projection.calc_matrix() * self.camera.calc_matrix();
+        self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&matrix.to_cols_array()));
+
         let output = self.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -191,8 +261,10 @@ impl<'a> GfxState<'a> {
                 timestamp_writes: None,
             });
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.draw(0..VERTICES.len() as u32, 0..1);
+            render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.mesh_vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.mesh_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.draw_indexed(0..self.mesh_index_count, 0, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));

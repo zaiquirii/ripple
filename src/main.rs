@@ -1,5 +1,6 @@
 mod renderer;
 mod mesh;
+mod camera;
 
 use std::sync::Arc;
 use log::info;
@@ -16,7 +17,8 @@ fn main() {
 #[derive(Default)]
 struct App<'a> {
     window: Option<Arc<Window>>,
-    renderer: Option<GfxState<'a>>
+    renderer: Option<GfxState<'a>>,
+    rotation: f32,
 }
 
 impl ApplicationHandler for App<'_> {
@@ -36,6 +38,11 @@ impl ApplicationHandler for App<'_> {
         if state.input(&event) {
             return;
         }
+        self.rotation += 0.01;
+        state.camera.position.x = self.rotation.sin();
+        state.camera.position.z = -self.rotation.cos();
+        state.camera.position *= 3.0;
+        state.camera.position.y = (self.rotation/3.0).sin() * 2.0;
 
         match event {
             WindowEvent::CloseRequested => {

@@ -11,5 +11,5 @@ env_logger = "0.11.5"
 log = "0.4.22"
 wgpu = "23.0.1"
 pollster = "0.4.0"
-macaw = "0.19.1"
+macaw = { version = "0.19.1", features = ["with_bytemuck"] }
 bytemuck = { version = "1.20.0", features = ["derive"] }
