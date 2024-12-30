@@ -2,6 +2,8 @@ use bytemuck::{Pod, Zeroable};
 use macaw::{Vec2, vec2};
 
 pub const DIVISIONS: u32 = 512;
+pub const PRISM_SIZE: u32 = 16;
+pub const PRISM_STEP: f32 = 1.3;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
