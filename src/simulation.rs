@@ -1,6 +1,7 @@
 use bytemuck::{Pod, Zeroable};
+use macaw::{Vec2, vec2};
 
-pub const DIVISIONS: u32 = 512;
+pub const DIVISIONS: u32 = 128;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -42,8 +43,15 @@ impl WaveSimulation {
             current_state: vec![WavePoint::default(); divisions * divisions],
             previous_state: vec![WavePoint::default(); divisions * divisions],
         };
-        s.poke(20, 20);
+        s.poke_normalized(vec2(0.5, 0.5));
         s
+    }
+
+    pub fn poke_normalized(&mut self, point: Vec2) {
+        let clamped = point.clamp(Vec2::ZERO, Vec2::ONE);
+        let x = clamped.x * self.divisions as f32;
+        let y = clamped.y * self.divisions as f32;
+        self.poke(x as usize, y as usize);
     }
 
     pub fn poke(&mut self, x_start: usize, y_start: usize) {
