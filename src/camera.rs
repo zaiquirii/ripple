@@ -20,12 +20,13 @@ impl Camera {
 
 pub struct Projection {
     aspect_ratio: f32,
-    fov_y: f32, // In radians
+    fov_y: f32, /// In Radians
     z_near: f32,
     z_far: f32,
 }
 
 impl Projection {
+    /// fov_y in radians
     pub fn new(
         width: u32,
         height: u32,

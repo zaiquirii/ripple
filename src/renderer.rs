@@ -1,37 +1,13 @@
 use std::sync::Arc;
 use macaw::{Mat4, vec3};
+use wgpu::{BindGroup, BindGroupEntry, Extent3d, ImageCopyTexture, ImageDataLayout, Texture};
+use wgpu::BindingResource::{Sampler, TextureView};
 use wgpu::util::DeviceExt;
 use winit::event::WindowEvent;
 use winit::window::Window;
 use crate::camera::{Camera, Projection};
-use crate::{camera, mesh};
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct Vertex {
-    position: [f32; 3],
-    color: [f32; 3],
-}
-
-impl Vertex {
-    const ATTRIBS: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
-                0 => Float32x3,
-                1 => Float32x3,
-            ];
-    fn desc() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &Self::ATTRIBS,
-        }
-    }
-}
-
-const VERTICES: &[Vertex] = &[
-    Vertex { position: [0.0, 0.5, 0.0], color: [1.0, 0.0, 0.0] },
-    Vertex { position: [-0.5, -0.5, 0.0], color: [0.0, 1.0, 0.0] },
-    Vertex { position: [0.5, -0.5, 0.0], color: [0.0, 0.0, 1.0] },
-];
+use crate::{mesh, simulation};
+use crate::simulation::DIVISIONS;
 
 pub struct GfxState<'a> {
     surface: wgpu::Surface<'a>,
@@ -48,12 +24,15 @@ pub struct GfxState<'a> {
 
     pub camera: Camera,
     projection: Projection,
-    camera_buffer: wgpu::Buffer,
-    camera_bind_group: wgpu::BindGroup,
+    camera_bind_group: BindGroup,
+    projection_buffer: wgpu::Buffer,
+    pub sim_texture_bind_group: BindGroup,
+    pub sim_texture_size: Extent3d,
+    pub sim_texture: Texture,
 }
 
 impl<'a> GfxState<'a> {
-    pub(crate) async fn new(window: Arc<Window>) -> GfxState<'a> {
+    pub(crate) async fn new(window: Arc<Window>, fov_y: f32) -> GfxState<'a> {
         let size = window.inner_size();
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -70,7 +49,7 @@ impl<'a> GfxState<'a> {
         ).await.unwrap();
         let (device, queue) = adapter.request_device(
             &wgpu::DeviceDescriptor {
-                required_features: wgpu::Features::empty(),
+                required_features: wgpu::Features::FLOAT32_FILTERABLE,
                 required_limits: Default::default(),
                 label: None,
                 memory_hints: Default::default(),
@@ -93,8 +72,69 @@ impl<'a> GfxState<'a> {
             desired_maximum_frame_latency: 2,
         };
 
-        let fov_y = 90f32.to_radians();
-        let projection = Projection::new(size.width, size.height, fov_y, 0.1, 10.0);
+        let sim_texture_size = wgpu::Extent3d {
+            width: simulation::DIVISIONS,
+            height: simulation::DIVISIONS,
+            depth_or_array_layers: 1,
+        };
+        let sim_texture = device.create_texture(
+            &wgpu::TextureDescriptor {
+                size: sim_texture_size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba32Float,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                label: Some("sim_texture"),
+                view_formats: &[],
+            }
+        );
+        let sim_texture_view = sim_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sim_texture_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+
+        let sim_texture_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+            label: Some("sim_texture_bind_group_layout"),
+        });
+        let sim_texture_bind_group = device.create_bind_group(
+            &wgpu::BindGroupDescriptor {
+                layout: &sim_texture_bind_group_layout,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: TextureView(&sim_texture_view),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: Sampler(&sim_texture_sampler),
+                    }
+                ],
+                label: Some("sim_texture_bind_group"),
+            },
+        );
+
+        let projection = Projection::new(size.width, size.height, fov_y, 0.1, 1000.0);
         let camera = Camera::new(vec3(0.0, 0.0, -1.0), vec3(0.0, 0.0, 0.0));
         let camera_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -123,7 +163,7 @@ impl<'a> GfxState<'a> {
         let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &camera_bind_group_layout,
             entries: &[
-                wgpu::BindGroupEntry {
+                BindGroupEntry {
                     binding: 0,
                     resource: camera_buffer.as_entire_binding(),
                 }
@@ -153,6 +193,7 @@ impl<'a> GfxState<'a> {
             label: Some("Render Pipeline Layout"),
             bind_group_layouts: &[
                 &camera_bind_group_layout,
+                &sim_texture_bind_group_layout,
             ],
             push_constant_ranges: &[],
         });
@@ -208,8 +249,12 @@ impl<'a> GfxState<'a> {
 
             camera,
             projection,
-            camera_buffer,
-            camera_bind_group
+            projection_buffer: camera_buffer,
+            camera_bind_group,
+
+            sim_texture_size,
+            sim_texture,
+            sim_texture_bind_group,
         }
     }
 
@@ -227,13 +272,29 @@ impl<'a> GfxState<'a> {
         }
     }
 
-    pub fn input(&mut self, event: &WindowEvent) -> bool {
-        false
+    pub fn update_sim_texture(&mut self, data: &[u8]) {
+        self.queue.write_texture(
+            ImageCopyTexture {
+                texture: &self.sim_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &data,
+            ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * 4 * DIVISIONS),
+                rows_per_image: Some(DIVISIONS),
+            },
+            self.sim_texture_size,
+        );
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        let matrix = self.projection.calc_matrix() * self.camera.calc_matrix();
-        self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&matrix.to_cols_array()));
+        // let matrix = self.projection.calc_matrix() * self.camera.calc_matrix();
+        // let matrix = Mat4::IDENTITY;
+        let matrix = Mat4::orthographic_lh(0.0, 1.0, 0.0, 1.0, -1.0, 1000.0);
+        self.queue.write_buffer(&self.projection_buffer, 0, bytemuck::cast_slice(&matrix.to_cols_array()));
 
         let output = self.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -262,6 +323,7 @@ impl<'a> GfxState<'a> {
             });
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.sim_texture_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.mesh_vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.mesh_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.draw_indexed(0..self.mesh_index_count, 0, 0..1);
