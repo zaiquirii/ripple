@@ -1,8 +1,8 @@
 use bytemuck::{Pod, Zeroable};
 use macaw::{Vec2, vec2};
 
-pub const DIVISIONS: u32 = 512;
-pub const PRISM_SIZE: u32 = 16;
+pub const DIVISIONS: u32 = 64;
+pub const PRISM_SIZE: u32 = 64;
 pub const PRISM_STEP: f32 = 1.3;
 
 #[repr(C)]
@@ -45,7 +45,7 @@ impl WaveSimulation {
             current_state: vec![WavePoint::default(); divisions * divisions],
             previous_state: vec![WavePoint::default(); divisions * divisions],
         };
-        s.poke_normalized(vec2(0.5, 0.5));
+        // s.poke_normalized(vec2(0.5, 0.5));
         s
     }
 

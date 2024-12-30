@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use macaw::{Vec2, vec2};
+use macaw::{UVec2, uvec2, Vec2, vec2};
 use wgpu::{VertexAttribute, VertexStepMode};
 use crate::simulation;
 
@@ -7,13 +7,13 @@ use crate::simulation;
 #[derive(Pod, Zeroable, Copy, Clone)]
 pub struct Instance {
     pub position: Vec2,
-    pub uv: Vec2,
+    pub uv: UVec2,
 }
 
 impl Instance {
     const VERTEX_ATTRIB: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
         1 => Float32x2,
-        2 => Float32x2,
+        2 => Uint32x2,
     ];
 
     pub fn desc() -> wgpu::VertexBufferLayout<'static> {
@@ -38,7 +38,10 @@ impl MeshGrid {
             for x in 0..size {
                 instances.push(Instance {
                     position: vec2(x as f32, y as f32) * pos_step,
-                    uv: vec2(x as f32, y as f32) * uv_step,
+                    uv: uvec2(
+                        (x as f32 * uv_step * simulation::DIVISIONS as f32) as u32,
+                        (y as f32 * uv_step * simulation::DIVISIONS as f32) as u32,
+                    ),
                 })
             }
         }

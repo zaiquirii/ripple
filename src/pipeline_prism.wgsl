@@ -12,27 +12,29 @@ var sim_sampler: sampler;
 struct VertexInput {
     @location(0) vertex: vec3<f32>,
     @location(1) position: vec2<f32>,
-    @location(2) uv: vec2<f32>,
+    @location(2) sim_coord: vec2<u32>,
 }
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) color: vec3<f32>,
-    @location(1) tex_coords: vec2<f32>,
 }
 
 @vertex
 fn vs_main(
     model: VertexInput,
 ) -> VertexOutput {
+    var sim_cell = textureLoad(sim_texture, model.sim_coord, 0);
     var position = model.vertex;
     position.x += model.position.x;
     position.z += model.position.y;
+    position.y += sim_cell.r * 5.0;
+
 
     var out: VertexOutput;
 //    out.color = model.color;
     out.color = vec3<f32>(model.vertex);
-    out.tex_coords = vec2<f32>(model.vertex.xy);
+//    out.tex_coords = vec2<f32>(model.vertex.xy);
     out.clip_position = camera.view_proj * vec4<f32>(position, 1.0);
     return out;
 }
