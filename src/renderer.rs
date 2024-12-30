@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use macaw::{Mat4, vec3};
-use wgpu::{BindGroup, BindGroupEntry, Extent3d, ImageCopyTexture, ImageDataLayout, Texture};
+use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, CommandEncoder, Device, Extent3d, ImageCopyTexture, ImageDataLayout, RenderPipeline, Texture, TextureFormat};
 use wgpu::BindingResource::{Sampler, TextureView};
 use wgpu::util::DeviceExt;
 use winit::event::WindowEvent;
@@ -29,6 +29,7 @@ pub struct GfxState<'a> {
     pub sim_texture_bind_group: BindGroup,
     pub sim_texture_size: Extent3d,
     pub sim_texture: Texture,
+    pub pipeline_2d: Pipeline2D,
 }
 
 impl<'a> GfxState<'a> {
@@ -235,6 +236,13 @@ impl<'a> GfxState<'a> {
             cache: None,
         });
 
+        let pipeline_2d = Pipeline2D::new(
+            &device,
+            config.format,
+            &camera_bind_group_layout,
+            &sim_texture_bind_group_layout,
+        );
+
         Self {
             window,
             surface,
@@ -255,6 +263,8 @@ impl<'a> GfxState<'a> {
             sim_texture_size,
             sim_texture,
             sim_texture_bind_group,
+
+            pipeline_2d,
         }
     }
 
@@ -301,36 +311,138 @@ impl<'a> GfxState<'a> {
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
         });
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            });
-            render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
-            render_pass.set_bind_group(1, &self.sim_texture_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, self.mesh_vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.mesh_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            render_pass.draw_indexed(0..self.mesh_index_count, 0, 0..1);
-        }
+        // {
+        //     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        //         label: Some("Render Pass"),
+        //         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+        //             view: &view,
+        //             resolve_target: None,
+        //             ops: wgpu::Operations {
+        //                 load: wgpu::LoadOp::Clear(wgpu::Color {
+        //                     r: 0.1,
+        //                     g: 0.2,
+        //                     b: 0.3,
+        //                     a: 1.0,
+        //                 }),
+        //                 store: wgpu::StoreOp::Store,
+        //             },
+        //         })],
+        //         depth_stencil_attachment: None,
+        //         occlusion_query_set: None,
+        //         timestamp_writes: None,
+        //     });
+        //     render_pass.set_pipeline(&self.render_pipeline);
+        //     render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+        //     render_pass.set_bind_group(1, &self.sim_texture_bind_group, &[]);
+        //     render_pass.set_vertex_buffer(0, self.mesh_vertex_buffer.slice(..));
+        //     render_pass.set_index_buffer(self.mesh_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        //     render_pass.draw_indexed(0..self.mesh_index_count, 0, 0..1);
+        // }
+        self.pipeline_2d.render(
+            &view,
+            &mut encoder,
+            &self.camera_bind_group,
+            &self.sim_texture_bind_group,
+        );
 
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
         Ok(())
+    }
+}
+
+struct Pipeline2D {
+    pipeline: RenderPipeline,
+}
+
+impl Pipeline2D {
+    fn new(
+        device: &Device,
+        surface_format: TextureFormat,
+        camera_layout: &BindGroupLayout,
+        sim_texture_layout: &BindGroupLayout,
+    ) -> Self {
+        let shader = device.create_shader_module(wgpu::include_wgsl!("pipeline_2d.wgsl"));
+        let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Pipeline 2D Layout"),
+            bind_group_layouts: &[
+                camera_layout,
+                sim_texture_layout,
+            ],
+            push_constant_ranges: &[],
+        });
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Render Pipeline"),
+            layout: Some(&render_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: surface_format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+            cache: None,
+        });
+
+        Self {
+            pipeline
+        }
+    }
+
+    fn render(
+        &self,
+        view: &wgpu::TextureView,
+        encoder: &mut CommandEncoder,
+        camera_bind_group: &BindGroup,
+        sim_texture_bind_group: &BindGroup,
+    ) {
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Render Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.1,
+                        g: 0.2,
+                        b: 0.3,
+                        a: 1.0,
+                    }),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        });
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, camera_bind_group, &[]);
+        render_pass.set_bind_group(1, sim_texture_bind_group, &[]);
+        render_pass.draw(0..4, 0..1);
     }
 }

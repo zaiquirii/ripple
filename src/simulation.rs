@@ -1,7 +1,7 @@
 use bytemuck::{Pod, Zeroable};
 use macaw::{Vec2, vec2};
 
-pub const DIVISIONS: u32 = 128;
+pub const DIVISIONS: u32 = 512;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]

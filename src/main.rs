@@ -7,8 +7,10 @@ use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 use log::info;
+use macaw::{Vec2, vec2};
 use winit::application::ApplicationHandler;
-use winit::event::WindowEvent;
+use winit::event::ElementState::Pressed;
+use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 use crate::renderer::GfxState;
@@ -23,6 +25,8 @@ struct App<'a> {
     renderer: Option<GfxState<'a>>,
     rotation: f32,
     simulation: WaveSimulation,
+
+    mouse_position: Vec2,
 }
 
 impl App<'_> {
@@ -32,7 +36,25 @@ impl App<'_> {
             renderer: None,
             rotation: 0.0,
             simulation: WaveSimulation::new(simulation::DIVISIONS),
+            mouse_position: Vec2::ZERO,
         }
+    }
+
+    pub fn input(&mut self, event: &WindowEvent) -> bool {
+        match event {
+            WindowEvent::CursorMoved { position, .. } => {
+                let size = self.renderer.as_mut().unwrap().size;
+                self.mouse_position = vec2(
+                    position.x as f32 / size.width as f32,
+                    position.y as f32 / size.height as f32,
+                );
+            },
+            WindowEvent::MouseInput{ state: Pressed, .. }  => {
+                self.simulation.poke_normalized(self.mouse_position);
+            },
+            _ => {}
+        }
+        return false;
     }
 }
 
@@ -48,6 +70,10 @@ impl ApplicationHandler for App<'_> {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
+        if self.input(&event) {
+            return
+        }
+
         let renderer = self.renderer.as_mut().unwrap();
         self.rotation += 0.01;
         renderer.camera.position.x = self.rotation.sin();
