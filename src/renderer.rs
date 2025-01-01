@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use egui_wgpu::ScreenDescriptor;
 use macaw::{Mat4, vec3};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, CommandEncoder, Device, Extent3d, ImageCopyTexture, ImageDataLayout, RenderPipeline, Texture, TextureFormat};
 use wgpu::BindingResource::{Sampler, TextureView};
@@ -7,6 +8,7 @@ use winit::event::WindowEvent;
 use winit::window::Window;
 use crate::camera::{Camera, Projection};
 use crate::{mesh, mesh_grid, simulation, texture};
+use crate::egui_renderer::EguiRenderer;
 use crate::simulation::DIVISIONS;
 
 pub enum RenderMode {
@@ -20,7 +22,7 @@ pub struct GfxState<'a> {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
-    window: Arc<Window>,
+    pub window: Arc<Window>,
 
     mesh_vertex_buffer: wgpu::Buffer,
     mesh_index_buffer: wgpu::Buffer,
@@ -40,6 +42,9 @@ pub struct GfxState<'a> {
     pub pipeline_prism: PipelinePrism,
     pub render_mode: RenderMode,
     pub instance_count: u32,
+
+    pub egui_renderer: EguiRenderer,
+    scale_factor: f32,
 }
 
 impl<'a> GfxState<'a> {
@@ -82,6 +87,8 @@ impl<'a> GfxState<'a> {
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
+
+        let egui_renderer = EguiRenderer::new(&device, config.format, None, 1, &window);
 
         let sim_texture_size = wgpu::Extent3d {
             width: simulation::DIVISIONS,
@@ -253,6 +260,9 @@ impl<'a> GfxState<'a> {
             pipeline_prism,
             render_mode: RenderMode::Prism,
             depth_texture,
+
+            egui_renderer,
+            scale_factor: 1.0
         }
     }
 
@@ -271,7 +281,7 @@ impl<'a> GfxState<'a> {
             self.depth_texture = texture::Texture::create_depth_texture(
                 &self.device,
                 &self.config,
-                "depth texture"
+                "depth texture",
             );
         }
     }
@@ -328,8 +338,99 @@ impl<'a> GfxState<'a> {
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
+
+        self.render_egui(&view);
+
         output.present();
         Ok(())
+    }
+
+    fn render_egui(&mut self, surface_view: &wgpu::TextureView) {
+        // // Attempt to handle minimizing window
+        // if let Some(window) = self.window.as_ref() {
+        //     if let Some(min) = window.is_minimized() {
+        //         if min {
+        //             println!("Window is minimized");
+        //             return;
+        //         }
+        //     }
+        // }
+        //
+        // let state = self.state.as_mut().unwrap();
+
+        let screen_descriptor = ScreenDescriptor {
+            size_in_pixels: [self.size.width, self.size.height],
+            pixels_per_point: self.window.scale_factor() as f32 * self.scale_factor,
+        };
+
+        // let surface_texture = state.surface.get_current_texture();
+
+        // match surface_texture {
+        //     Err(SurfaceError::Outdated) => {
+        //         // Ignoring outdated to allow resizing and minimization
+        //         println!("wgpu surface outdated");
+        //         return;
+        //     }
+        //     Err(_) => {
+        //         surface_texture.expect("Failed to acquire next swap chain texture");
+        //         return;
+        //     }
+        //     Ok(_) => {}
+        // };
+
+        // let surface_texture = surface_texture.unwrap();
+
+        // let surface_view = surface_texture
+        //     .texture
+        //     .create_view(&wgpu::TextureViewDescriptor::default());
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+        let window = self.window.as_ref();
+
+        {
+            self.egui_renderer.begin_frame(window);
+
+            egui::Window::new("winit + egui + wgpu says hello!")
+                .resizable(true)
+                .vscroll(true)
+                .default_open(false)
+                .show(self.egui_renderer.context(), |ui| {
+                    ui.label("Label!");
+
+                    if ui.button("Button!").clicked() {
+                        println!("boom!")
+                    }
+
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        ui.label(format!(
+                            "Pixels per point: {}",
+                            self.egui_renderer.context().pixels_per_point()
+                        ));
+                        if ui.button("-").clicked() {
+                            self.scale_factor = (self.scale_factor - 0.1).max(0.3);
+                        }
+                        if ui.button("+").clicked() {
+                            self.scale_factor = (self.scale_factor + 0.1).min(3.0);
+                        }
+                    });
+                });
+
+            self.egui_renderer.end_frame_and_draw(
+                &self.device,
+                &self.queue,
+                &mut encoder,
+                window,
+                &surface_view,
+                screen_descriptor,
+            );
+        }
+
+        self.queue.submit(Some(encoder.finish()));
+        // surface_texture.present();
     }
 }
 
@@ -343,7 +444,7 @@ impl Pipeline2D {
         surface_format: TextureFormat,
         sim_texture_layout: &BindGroupLayout,
     ) -> Self {
-        let shader = device.create_shader_module(wgpu::include_wgsl!("pipeline_2d.wgsl"));
+        let shader = device.create_shader_module(wgpu::include_wgsl!("shaders/pipeline_2d.wgsl"));
         let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Pipeline 2D Layout"),
             bind_group_layouts: &[
@@ -436,7 +537,7 @@ impl PipelinePrism {
         camera_layout: &BindGroupLayout,
         sim_texture_layout: &BindGroupLayout,
     ) -> Self {
-        let shader = device.create_shader_module(wgpu::include_wgsl!("pipeline_prism.wgsl"));
+        let shader = device.create_shader_module(wgpu::include_wgsl!("shaders/pipeline_prism.wgsl"));
         let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
             bind_group_layouts: &[

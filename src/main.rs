@@ -4,6 +4,7 @@ mod camera;
 mod simulation;
 mod mesh_grid;
 mod texture;
+mod egui_renderer;
 
 use std::sync::Arc;
 use std::thread::sleep;
@@ -44,6 +45,12 @@ impl App<'_> {
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
+        let mut renderer = self.renderer.as_mut().unwrap();
+        let window = renderer.window.clone();
+        renderer.egui_renderer.handle_input(
+            &window,
+            event);
+
         match event {
             WindowEvent::CursorMoved { position, .. } => {
                 let size = self.renderer.as_mut().unwrap().size;
@@ -97,7 +104,7 @@ impl ApplicationHandler for App<'_> {
         let renderer = self.renderer.as_mut().unwrap();
         renderer.camera.target.x = center_point;
         renderer.camera.target.z = center_point;
-        // self.rotation += 0.01;
+        self.rotation += 0.001;
         let mut pos = vec3(self.rotation.sin(), 0.0, -self.rotation.cos()) * center_point * 1.5;
         pos.x += center_point;
         pos.z += center_point;

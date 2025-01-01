@@ -1,8 +1,8 @@
 use bytemuck::{Pod, Zeroable};
 use macaw::{Vec2, vec2};
 
-pub const DIVISIONS: u32 = 64;
-pub const PRISM_SIZE: u32 = 64;
+pub const DIVISIONS: u32 = 128;
+pub const PRISM_SIZE: u32 = 24;
 pub const PRISM_STEP: f32 = 1.3;
 
 #[repr(C)]
@@ -41,7 +41,7 @@ impl WaveSimulation {
         let divisions = divisions as usize;
         let mut s = Self {
             divisions,
-            damping: 0.99,
+            damping: 0.98,
             current_state: vec![WavePoint::default(); divisions * divisions],
             previous_state: vec![WavePoint::default(); divisions * divisions],
         };
