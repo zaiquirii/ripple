@@ -10,7 +10,7 @@ use crate::simulation::DIVISIONS;
 
 pub struct GfxState<'a> {
     surface: wgpu::Surface<'a>,
-    device: wgpu::Device,
+    pub(crate) device: wgpu::Device,
     pub(crate) queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
@@ -66,12 +66,12 @@ impl<'a> GfxState<'a> {
         };
 
         let egui_renderer = EguiRenderer::new(&device, config.format, None, 1, &window);
-        let projection = Projection::new(size.width, size.height, fov_y, 0.1, 1000.0);
+        let projection = Projection::new(size.width, size.height, fov_y, 0.1, 10000.0);
         let camera = Camera::new(vec3(0.0, 0.0, -1.0), vec3(0.0, 0.0, 0.0));
 
         surface.configure(&device, &config);
-        let cube = mesh::cube();
-        let grid = mesh_grid::MeshGrid::square_grid(simulation::PRISM_SIZE as usize);
+        let cube = mesh::square_prism(1.0);
+        let grid = mesh_grid::MeshGrid::square_grid(simulation::PRISM_SIZE as usize, simulation::PRISM_STEP);
         let sim = SimRenderer::new(&device, &config, &cube, &grid, DIVISIONS);
 
         Self {

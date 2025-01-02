@@ -59,6 +59,14 @@ impl SimRenderer {
             bytemuck::cast_slice(&transform.to_cols_array()))
     }
 
+    pub fn update_prism(&mut self, device: &wgpu::Device, prism: &Mesh) {
+        self.prism = prism.push_to_device(device);
+    }
+
+    pub fn update_grid(&mut self, device: &wgpu::Device, grid: &MeshGrid) {
+        self.grid = grid.push_to_device(device);
+    }
+
     pub fn update_sim_data(&self, queue: &wgpu::Queue, divisions: u32, data: &[u8]) {
         queue.write_texture(
             wgpu::ImageCopyTexture {

@@ -56,23 +56,23 @@ pub struct UploadedMesh {
     pub index_count: u32,
 }
 
-
-pub fn cube() -> Mesh {
+pub fn square_prism(height: f32) -> Mesh {
     let mut mesh = Mesh {
         vertices: Vec::new(),
         indices: Vec::new(),
     };
+
     // front back (Z swaps)
-    mesh.push_quad(vec3(0.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0), vec3(1.0, 1.0, 0.0), vec3(0.0, 1.0, 0.0));
-    mesh.push_quad(vec3(0.0, 0.0, 1.0), vec3(0.0, 1.0, 1.0), vec3(1.0, 1.0, 1.0), vec3(1.0, 0.0, 1.0));
+    mesh.push_quad(vec3(0.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0), vec3(1.0, 1.0, 0.0), vec3(0.0, height, 0.0));
+    mesh.push_quad(vec3(0.0, 0.0, 1.0), vec3(0.0, height, 1.0), vec3(1.0, height, 1.0), vec3(1.0, 0.0, 1.0));
 
     // left right (X swaps)
-    mesh.push_quad(vec3(0.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 1.0, 1.0), vec3(0.0, 0.0, 1.0));
-    mesh.push_quad(vec3(1.0, 0.0, 0.0), vec3(1.0, 0.0, 1.0), vec3(1.0, 1.0, 1.0), vec3(1.0, 1.0, 0.0));
+    mesh.push_quad(vec3(0.0, 0.0, 0.0), vec3(0.0, height, 0.0), vec3(0.0, height, 1.0), vec3(0.0, 0.0, 1.0));
+    mesh.push_quad(vec3(1.0, 0.0, 0.0), vec3(1.0, 0.0, 1.0), vec3(1.0, height, 1.0), vec3(1.0, height, 0.0));
 
     // top bottom (Y swaps)
     mesh.push_quad(vec3(0.0, 0.0, 0.0), vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0));
-    mesh.push_quad(vec3(0.0, 1.0, 0.0), vec3(1.0, 1.0, 0.0), vec3(1.0, 1.0, 1.0), vec3(0.0, 1.0, 1.0));
+    mesh.push_quad(vec3(0.0, height, 0.0), vec3(1.0, height, 0.0), vec3(1.0, height, 1.0), vec3(0.0, height, 1.0));
 
     mesh
 }

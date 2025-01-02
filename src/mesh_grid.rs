@@ -30,14 +30,15 @@ pub struct MeshGrid {
 }
 
 impl MeshGrid {
-    pub fn square_grid(size: usize) -> Self {
-        let pos_step = simulation::PRISM_STEP;
+    pub fn square_grid(size: usize, step_size: f32) -> Self {
+        let length = size as f32 * step_size;
+        let half_length = length / 2.0;
         let uv_step = 1.0 / (size as f32);
         let mut instances = Vec::new();
         for y in 0..size {
             for x in 0..size {
                 instances.push(Instance {
-                    position: vec2(x as f32, y as f32) * pos_step,
+                    position: vec2(x as f32, y as f32) * step_size - half_length,
                     uv: uvec2(
                         (x as f32 * uv_step * simulation::DIVISIONS as f32) as u32,
                         (y as f32 * uv_step * simulation::DIVISIONS as f32) as u32,
