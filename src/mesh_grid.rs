@@ -1,6 +1,6 @@
 use bytemuck::{Pod, Zeroable};
 use macaw::{UVec2, uvec2, Vec2, vec2};
-use wgpu::{VertexAttribute, VertexStepMode};
+use wgpu::util::DeviceExt;
 use crate::simulation;
 
 #[repr(C)]
@@ -18,8 +18,8 @@ impl Instance {
 
     pub fn desc() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Instance>() as wgpu::BufferAddress,
-            step_mode: VertexStepMode::Instance,
+            array_stride: size_of::<Instance>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Instance,
             attributes: &Self::VERTEX_ATTRIB,
         }
     }
@@ -49,4 +49,23 @@ impl MeshGrid {
             instances
         }
     }
+
+    pub fn push_to_device(&self, device: &wgpu::Device) -> UploadedMeshGrid {
+        let instance_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("mesh instance buffer"),
+                contents: bytemuck::cast_slice(&self.instances),
+                usage: wgpu::BufferUsages::VERTEX,
+            }
+        );
+        UploadedMeshGrid {
+            instance_buffer,
+            instance_count: self.instances.len() as u32,
+        }
+    }
+}
+
+pub struct UploadedMeshGrid {
+    pub instance_buffer: wgpu::Buffer,
+    pub instance_count: u32,
 }

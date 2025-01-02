@@ -1,4 +1,5 @@
 use macaw::{Vec3, vec3};
+use wgpu::util::DeviceExt;
 
 #[derive(Default, Debug)]
 pub struct Mesh {
@@ -23,7 +24,38 @@ impl Mesh {
             self.indices.push(i + start_index)
         }
     }
+
+    pub fn push_to_device(&self, device: &wgpu::Device) -> UploadedMesh {
+        let vertex_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(&self.vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            }
+        );
+        let index_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(&self.indices),
+                usage: wgpu::BufferUsages::INDEX,
+            }
+        );
+        UploadedMesh {
+            vertex_buffer,
+            vertex_count: self.vertices.len() as u32,
+            index_buffer,
+            index_count: self.indices.len() as u32,
+        }
+    }
 }
+
+pub struct UploadedMesh {
+    pub vertex_buffer: wgpu::Buffer,
+    pub vertex_count: u32,
+    pub index_buffer: wgpu::Buffer,
+    pub index_count: u32,
+}
+
 
 pub fn cube() -> Mesh {
     let mut mesh = Mesh {

@@ -31,7 +31,7 @@ impl Default for WavePoint {
 
 pub struct WaveSimulation {
     divisions: usize,
-    damping: f32,
+    pub damping: f32,
     current_state: Vec<WavePoint>,
     previous_state: Vec<WavePoint>,
 }
@@ -45,8 +45,17 @@ impl WaveSimulation {
             current_state: vec![WavePoint::default(); divisions * divisions],
             previous_state: vec![WavePoint::default(); divisions * divisions],
         };
-        // s.poke_normalized(vec2(0.5, 0.5));
         s
+    }
+
+    pub fn divisions(&self) -> usize {
+        self.divisions
+    }
+
+    pub fn set_divisions(&mut self, divisions: usize) {
+        self.divisions = divisions;
+        self.current_state = vec![WavePoint::default(); divisions * divisions];
+        self.previous_state = vec![WavePoint::default(); divisions * divisions];
     }
 
     pub fn poke_normalized(&mut self, point: Vec2) {
@@ -60,7 +69,7 @@ impl WaveSimulation {
         for y in y_start..y_start + 5 {
             for x in x_start..x_start + 5 {
                 let index = y * self.divisions + x;
-                self.current_state[index].value = 1.0;
+                self.current_state[index].value += 1.0;
             }
         }
     }
@@ -108,7 +117,14 @@ impl WaveSimulation {
         self.previous_state[y * self.divisions + x].value.max(0.0)
     }
 
-    pub fn current_state(&self) -> &[u8] {
+    pub fn current_state(&self) -> (u32, &[u8]) {
+        (
+            self.divisions as u32,
+            bytemuck::cast_slice(self.current_state.as_slice())
+        )
+    }
+
+    pub fn current_state_old(&self) -> &[u8] {
         bytemuck::cast_slice(self.current_state.as_slice())
     }
 }

@@ -5,10 +5,12 @@ mod simulation;
 mod mesh_grid;
 mod texture;
 mod egui_renderer;
+mod sim_renderer;
 
 use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
+use egui::{SliderOrientation, Widget};
 use log::info;
 use macaw::{Vec2, vec2, Vec3, vec3};
 use winit::application::ApplicationHandler;
@@ -17,7 +19,8 @@ use winit::event::{ElementState, KeyEvent, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
-use crate::renderer::{GfxState, RenderMode};
+use crate::renderer::{GfxState};
+use crate::sim_renderer::RenderMode;
 use crate::simulation::WaveSimulation;
 
 fn main() {
@@ -30,6 +33,8 @@ struct App<'a> {
     rotation: f32,
     simulation: WaveSimulation,
 
+    grid_size: usize,
+
     mouse_position: Vec2,
 }
 
@@ -41,6 +46,7 @@ impl App<'_> {
             rotation: 0.0,
             simulation: WaveSimulation::new(simulation::DIVISIONS),
             mouse_position: Vec2::ZERO,
+            grid_size: 128,
         }
     }
 
@@ -71,7 +77,7 @@ impl App<'_> {
                 }, ..
             } => {
                 let renderer = self.renderer.as_mut().unwrap();
-                renderer.render_mode = match renderer.render_mode {
+                renderer.sim.render_mode = match renderer.sim.render_mode {
                     RenderMode::Texture => RenderMode::Prism,
                     RenderMode::Prism => RenderMode::Texture,
                 }
@@ -79,6 +85,56 @@ impl App<'_> {
             _ => {}
         }
         return false;
+    }
+
+    pub fn render_ui(&mut self) {
+        let renderer = self.renderer.as_mut().unwrap();
+        egui::Window::new("Settings")
+            .resizable(true)
+            .vscroll(true)
+            .default_open(true)
+            .show(renderer.egui_renderer.context(), |ui| {
+                ui.label("Simulation");
+                ui.add(egui::Slider::new(&mut self.simulation.damping, 0.0..=1.0).fixed_decimals(3).text("Damping"));
+                ui.horizontal(|ui| {
+                    ui.label("Damping");
+                    ui.add(egui::Slider::new(&mut self.simulation.damping, 0.0..=1.0).fixed_decimals(3));
+                });
+
+                let mut sim_resolution = self.simulation.divisions();
+                ui.add(egui::Slider::new(&mut sim_resolution, 4..=1024));
+                if sim_resolution != self.simulation.divisions() {}
+
+
+                let mut grid_size = self.grid_size;
+                ui.add(
+                    egui::Slider::new::<usize>(&mut grid_size, 5..=1024)
+                );
+
+                if ui.button("Button!").clicked() {
+                    println!("boom!")
+                }
+
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label(format!(
+                        "Pixels per point: {}",
+                        renderer.egui_renderer.context().pixels_per_point()
+                    ));
+                    if ui.button("-").clicked() {
+                        renderer.scale_factor = (renderer.scale_factor - 0.1).max(0.3);
+                    }
+                    if ui.button("+").clicked() {
+                        renderer.scale_factor = (renderer.scale_factor + 0.1).min(3.0);
+                    }
+                });
+            });
+    }
+
+    pub fn update_divisions(&mut self, divisions: usize) {
+        // Update simulation
+        // Update grid
+        //
     }
 }
 
@@ -117,11 +173,18 @@ impl ApplicationHandler for App<'_> {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
-                self.window.as_ref().unwrap().request_redraw();
+                renderer.egui_renderer.begin_frame(self.window.as_ref().unwrap());
+                self.render_ui();
+
                 use wgpu::SurfaceError as SE;
                 self.simulation.advance();
 
-                renderer.update_sim_texture(self.simulation.current_state());
+                let renderer = self.renderer.as_mut().unwrap();
+                let camera_transform = renderer.projection.calc_matrix() * renderer.camera.calc_matrix();
+                renderer.sim.set_camera_transform(&renderer.queue, camera_transform);
+                let (divisions, sim_data) = self.simulation.current_state();
+                renderer.sim.update_sim_data(&renderer.queue, divisions, sim_data);
+                // renderer.update_sim_texture(self.simulation.current_state_old());
                 match renderer.render() {
                     Ok(_) => {}
                     Err(SE::Lost | SE::Outdated) => renderer.resize(renderer.size),
@@ -133,6 +196,7 @@ impl ApplicationHandler for App<'_> {
                         log::warn!("Surface timeout");
                     }
                 }
+                self.window.as_ref().unwrap().request_redraw();
             }
             WindowEvent::Resized(new_size) => {
                 renderer.resize(new_size);
@@ -149,3 +213,5 @@ pub fn run() {
     let mut app = App::new();
     event_loop.run_app(&mut app).unwrap();
 }
+
+
