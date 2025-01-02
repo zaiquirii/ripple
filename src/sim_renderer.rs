@@ -77,6 +77,18 @@ impl SimRenderer {
         );
     }
 
+    pub fn resize(
+        &mut self,
+        device: &wgpu::Device,
+        surface_config: &wgpu::SurfaceConfiguration,
+    ) {
+        self.pipeline_prism.depth_texture = texture::Texture::create_depth_texture(
+            device,
+            surface_config,
+            "depth texture",
+        )
+    }
+
     pub fn render(
         &mut self,
         view: &wgpu::TextureView,

@@ -8,14 +8,11 @@ mod egui_renderer;
 mod sim_renderer;
 
 use std::sync::Arc;
-use std::thread::sleep;
-use std::time::Duration;
-use egui::{SliderOrientation, Widget};
 use log::info;
-use macaw::{Vec2, vec2, Vec3, vec3};
+use macaw::{Vec2, vec2, vec3};
 use winit::application::ApplicationHandler;
 use winit::event::ElementState::Pressed;
-use winit::event::{ElementState, KeyEvent, WindowEvent};
+use winit::event::{KeyEvent, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
@@ -51,7 +48,7 @@ impl App<'_> {
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
-        let mut renderer = self.renderer.as_mut().unwrap();
+        let renderer = self.renderer.as_mut().unwrap();
         let window = renderer.window.clone();
         renderer.egui_renderer.handle_input(
             &window,

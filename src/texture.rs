@@ -1,4 +1,4 @@
-use wgpu::{SamplerDescriptor, TextureDescriptor, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor};
+use wgpu::{SamplerDescriptor, TextureView, TextureViewDescriptor};
 use wgpu::TextureDimension::D2;
 
 pub struct Texture {
@@ -8,7 +8,7 @@ pub struct Texture {
 }
 
 impl Texture {
-    pub const DEPTH_FORMAT: wgpu::TextureFormat = TextureFormat::Depth32Float;
+    pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
     pub fn create_depth_texture(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, label: &str) -> Self {
         let size = wgpu::Extent3d {
@@ -23,7 +23,7 @@ impl Texture {
             sample_count: 1,
             dimension: D2,
             format: Self::DEPTH_FORMAT,
-            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         };
         let texture = device.create_texture(&desc);

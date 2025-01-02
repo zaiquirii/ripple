@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use macaw::{Vec2, vec2};
+use macaw::{Vec2};
 
 pub const DIVISIONS: u32 = 128;
 pub const PRISM_SIZE: u32 = 24;
@@ -39,13 +39,12 @@ pub struct WaveSimulation {
 impl WaveSimulation {
     pub fn new(divisions: u32) -> Self {
         let divisions = divisions as usize;
-        let mut s = Self {
+         Self {
             divisions,
             damping: 0.98,
             current_state: vec![WavePoint::default(); divisions * divisions],
             previous_state: vec![WavePoint::default(); divisions * divisions],
-        };
-        s
+        }
     }
 
     pub fn divisions(&self) -> usize {
@@ -80,8 +79,8 @@ impl WaveSimulation {
             for x in 0..self.divisions {
                 let index = y * self.divisions + x;
                 if self.previous_state[index].medium >= 0.0 {
-                    let mut value = self.previous_state[index].value;
-                    let mut vel = self.previous_state[index].velocity;
+                    let value = self.previous_state[index].value;
+                    let vel = self.previous_state[index].velocity;
                     let mut target = self.previous_state[index].medium;
 
                     let mut mid = 0.0;
@@ -122,9 +121,5 @@ impl WaveSimulation {
             self.divisions as u32,
             bytemuck::cast_slice(self.current_state.as_slice())
         )
-    }
-
-    pub fn current_state_old(&self) -> &[u8] {
-        bytemuck::cast_slice(self.current_state.as_slice())
     }
 }
