@@ -1,4 +1,4 @@
-use macaw::{Mat4, Plane3, Vec2, Vec3, vec4, Vec4Swizzles};
+use macaw::{Mat4, Plane3, Vec2, Vec3, Vec4Swizzles};
 
 pub struct Camera {
     pub position: Vec3,
@@ -48,8 +48,6 @@ impl Projection {
     }
 
     pub fn calc_matrix(&self) -> Mat4 {
-        let height = 25.0;
-        // Mat4::orthographic_lh(-height, height, -height * self.aspect_ratio, height * self.aspect_ratio, self.z_near, self.z_far)
         Mat4::perspective_lh(self.fov_y, self.aspect_ratio, self.z_near, self.z_far)
     }
 }

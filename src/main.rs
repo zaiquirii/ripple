@@ -22,10 +22,6 @@ use crate::renderer::{GfxState};
 use crate::sim_renderer::RenderMode;
 use crate::simulation::WaveSimulation;
 
-fn main() {
-    run();
-}
-
 #[derive(Copy, Clone, PartialEq)]
 enum PrismType {
     Square,
@@ -104,12 +100,35 @@ impl App<'_> {
         }
     }
 
-    pub fn input(&mut self, event: &WindowEvent) -> bool {
+    fn initialize(&mut self, event_loop: &ActiveEventLoop) {
+        let mut attributes = Window::default_attributes();
+        attributes.title = "Ripple".into();
+        let window = Arc::new(event_loop.create_window(attributes).unwrap());
+        self.window = Some(window.clone());
+
+        let (mesh, grid) = match self.render_config.prism_type {
+            PrismType::Square => {
+                let mesh = mesh::square_prism(self.render_config.prism_height);
+                let grid = mesh_grid::MeshGrid::square_grid(self.render_config.grid_size, self.render_config.step_size);
+                (mesh, grid)
+            }
+            PrismType::Hex => {
+                let mesh = mesh::hex_prism(self.render_config.prism_height);
+                let grid = mesh_grid::MeshGrid::hex_grid(self.render_config.grid_size, self.render_config.step_size);
+                (mesh, grid)
+            }
+        };
+        let state = pollster::block_on(
+            GfxState::new(
+                window.clone(), 60f32.to_radians(), &mesh, &grid)
+        );
+        self.renderer = Some(state);
+    }
+
+    fn input(&mut self, event: &WindowEvent) -> bool {
         let renderer = self.renderer.as_mut().unwrap();
         let window = renderer.window.clone();
-        renderer.egui_renderer.handle_input(
-            &window,
-            event);
+        renderer.egui_renderer.handle_input(&window, event);
 
         match event {
             WindowEvent::CursorMoved { position, .. } => {
@@ -134,9 +153,6 @@ impl App<'_> {
                         let hexes = self.render_config.grid_size as f32 * 2.0 + 1.0;
                         let grid_width = hexes * self.render_config.step_size * 3.0_f32.sqrt() * 0.5;
                         println!("grid width: {}", grid_width);
-
-
-                        // let grid_half_width = self.render_config.grid_size as f32 * self.render_config.step_size * 3.0_f32.sqrt();
                         let normalized = (plane_point + (grid_width / 2.0)) / grid_width;
                         println!("normalized: {}", normalized);
                         self.simulation.poke_normalized(normalized);
@@ -145,7 +161,7 @@ impl App<'_> {
             }
             WindowEvent::KeyboardInput {
                 event: KeyEvent {
-                    physical_key: physical_key,
+                    physical_key,
                     state: Pressed,
                     repeat: false,
                     ..
@@ -166,6 +182,54 @@ impl App<'_> {
             _ => {}
         }
         return false;
+    }
+
+    fn handle_next_frame(&mut self, event_loop: &ActiveEventLoop) {
+        self.update_camera();
+        self.tick_raindrops();
+        self.simulation.advance();
+        if !self.render() {
+            event_loop.exit();
+        } else {
+            self.window.as_ref().unwrap().request_redraw();
+        }
+    }
+
+    fn update_camera(&mut self) {
+        let grid_width = match self.render_config.prism_type {
+            PrismType::Square => {
+                self.render_config.grid_size as f32 * self.render_config.step_size
+            }
+            PrismType::Hex => {
+                self.render_config.grid_size as f32 * 2.0 * self.render_config.step_size * 3_f32.sqrt() * 0.5
+            }
+        };
+        let half_width = grid_width * 0.5;
+
+        if self.camera_config.rotation_enabled {
+            self.rotation += self.camera_config.rotation_speed.to_radians();
+        }
+        let pos = vec3(self.rotation.sin(), 0.0, -self.rotation.cos()) * half_width * self.camera_config.distance;
+        self.camera.target = pos * self.camera_config.target_ratio;
+        self.camera.position = pos;
+        let mut angle = self.camera_config.angle.to_radians();
+        if self.camera_config.change_angle {
+            angle = angle * (0.6 + 0.4 * self.rotation.sin());
+        }
+        self.camera.position.y = angle.sin() * half_width;
+    }
+
+    fn tick_raindrops(&mut self) {
+        if self.raindrop_config.enabled {
+            self.raindrop_config.ticks += 1;
+            if self.raindrop_config.ticks >= self.raindrop_config.delay {
+                self.raindrop_config.ticks = 0;
+                self.simulation.poke_normalized(vec2(
+                    rand::random(),
+                    rand::random(),
+                ));
+            }
+        }
     }
 
     pub fn render_ui(&mut self) {
@@ -235,7 +299,6 @@ impl App<'_> {
                     .text("Target ratio")
                     .ui(ui);
 
-
                 ui.separator();
                 ui.label("Raindrops");
                 egui::Checkbox::new(&mut self.raindrop_config.enabled, "Enabled").ui(ui);
@@ -244,31 +307,37 @@ impl App<'_> {
                     .ui(ui);
             });
     }
+
+    fn render(&mut self) -> bool {
+        let renderer = self.renderer.as_mut().unwrap();
+        renderer.egui_renderer.begin_frame(self.window.as_ref().unwrap());
+        self.render_ui();
+
+        use wgpu::SurfaceError as SE;
+        let renderer = self.renderer.as_mut().unwrap();
+        let camera_transform = renderer.projection.calc_matrix() * self.camera.calc_matrix();
+        renderer.sim.set_camera_transform(&renderer.queue, camera_transform);
+        let (divisions, sim_data) = self.simulation.current_state();
+        renderer.sim.update_sim_data(&renderer.queue, divisions, sim_data);
+        match renderer.render() {
+            Ok(_) => {}
+            Err(SE::Lost | SE::Outdated) => renderer.resize(renderer.size),
+            Err(SE::OutOfMemory) => {
+                log::error!("OutOfMemory");
+                return false;
+            }
+            Err(SE::Timeout) => {
+                log::warn!("Surface timeout");
+            }
+        }
+        true
+    }
 }
 
 impl ApplicationHandler for App<'_> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
-            let window = Arc::new(event_loop.create_window(Window::default_attributes()).unwrap());
-            self.window = Some(window.clone());
-
-            let (mesh, grid) = match self.render_config.prism_type {
-                PrismType::Square => {
-                    let mesh = mesh::square_prism(self.render_config.prism_height);
-                    let grid = mesh_grid::MeshGrid::square_grid(self.render_config.grid_size, self.render_config.step_size);
-                    (mesh, grid)
-                }
-                PrismType::Hex => {
-                    let mesh = mesh::hex_prism(self.render_config.prism_height);
-                    let grid = mesh_grid::MeshGrid::hex_grid(self.render_config.grid_size, self.render_config.step_size);
-                    (mesh, grid)
-                }
-            };
-            let state = pollster::block_on(
-                GfxState::new(
-                    window.clone(), 60f32.to_radians(), &mesh, &grid)
-            );
-            self.renderer = Some(state);
+            self.initialize(event_loop);
         }
     }
 
@@ -276,71 +345,12 @@ impl ApplicationHandler for App<'_> {
         if self.input(&event) {
             return;
         }
-
-
         match event {
             WindowEvent::CloseRequested => {
                 info!("Window close button pressed: stopping");
                 event_loop.exit();
             }
-            WindowEvent::RedrawRequested => {
-                let grid_width = match self.render_config.prism_type {
-                    PrismType::Square => {
-                        self.render_config.grid_size as f32 * self.render_config.step_size
-                    }
-                    PrismType::Hex => {
-                        self.render_config.grid_size as f32 * 2.0 * self.render_config.step_size * 3_f32.sqrt() * 0.5
-                    }
-                };
-                let half_width = grid_width * 0.5;
-
-                let renderer = self.renderer.as_mut().unwrap();
-                if self.camera_config.rotation_enabled {
-                    self.rotation += self.camera_config.rotation_speed.to_radians();
-                }
-                let pos = vec3(self.rotation.sin(), 0.0, -self.rotation.cos()) * half_width * self.camera_config.distance;
-                self.camera.target = pos * self.camera_config.target_ratio;
-                self.camera.position = pos;
-                let mut angle = self.camera_config.angle.to_radians();
-                if self.camera_config.change_angle {
-                    angle = angle * (0.6 + 0.4 * self.rotation.sin());
-                }
-                self.camera.position.y = angle.sin() * half_width;
-                renderer.egui_renderer.begin_frame(self.window.as_ref().unwrap());
-                self.render_ui();
-
-                if self.raindrop_config.enabled {
-                    self.raindrop_config.ticks += 1;
-                    if self.raindrop_config.ticks >= self.raindrop_config.delay {
-                        self.raindrop_config.ticks = 0;
-                        self.simulation.poke_normalized(vec2(
-                            rand::random(),
-                            rand::random(),
-                        ));
-                    }
-                }
-
-                use wgpu::SurfaceError as SE;
-                self.simulation.advance();
-
-                let renderer = self.renderer.as_mut().unwrap();
-                let camera_transform = renderer.projection.calc_matrix() * self.camera.calc_matrix();
-                renderer.sim.set_camera_transform(&renderer.queue, camera_transform);
-                let (divisions, sim_data) = self.simulation.current_state();
-                renderer.sim.update_sim_data(&renderer.queue, divisions, sim_data);
-                match renderer.render() {
-                    Ok(_) => {}
-                    Err(SE::Lost | SE::Outdated) => renderer.resize(renderer.size),
-                    Err(SE::OutOfMemory) => {
-                        log::error!("OutOfMemory");
-                        event_loop.exit();
-                    }
-                    Err(SE::Timeout) => {
-                        log::warn!("Surface timeout");
-                    }
-                }
-                self.window.as_ref().unwrap().request_redraw();
-            }
+            WindowEvent::RedrawRequested => self.handle_next_frame(event_loop),
             WindowEvent::Resized(new_size) => {
                 let renderer = self.renderer.as_mut().unwrap();
                 renderer.resize(new_size);
@@ -350,12 +360,10 @@ impl ApplicationHandler for App<'_> {
     }
 }
 
-pub fn run() {
+fn main() {
     env_logger::init();
     let event_loop = EventLoop::new().unwrap();
     event_loop.set_control_flow(ControlFlow::Poll);
     let mut app = App::new();
     event_loop.run_app(&mut app).unwrap();
 }
-
-

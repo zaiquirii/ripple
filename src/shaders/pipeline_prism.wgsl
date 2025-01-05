@@ -39,28 +39,28 @@ fn vs_main(
     out.color = model.vertex;
     out.world_pos = position;
     out.world_normal = model.normal;
-//    out.color = model.color;
-//    out.color = vec3<f32>(f32(model.sim_coord.x) / 128.0, f32(model.sim_coord.y) / 128.0, 0.0);
-//    out.color = vec3<f32>(sim_cell.r, sim_cell.g, 0.0);
     out.tex_coords= vec2<f32>(f32(model.sim_coord.x) / 128.0, f32(model.sim_coord.y) / 128.0);
     out.clip_position = camera.view_proj * vec4<f32>(position, 1.0);
     return out;
 }
 
 // Fragment shader
-
-const light_pos = vec3<f32>(200.0, 200.0, 200.0);
+const light_pos = vec3<f32>(0.0, 2.0, 0.0);
 const light_color = vec3<f32>(1.0, 1.0, 1.0);
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    let ambient_strength = 0.1;
+    let ambient_color = light_color * ambient_strength;
+
     let light_dir = normalize(light_pos - in.world_pos);
     let diffuse_strength = max(dot(in.world_normal, light_dir), 0.0);
     let diffuse_color = light_color * diffuse_strength;
-    let ambient_strength = 0.1;
-    let ambient_color = light_color * ambient_strength;
+
     var tex_color = textureSample(sim_texture, sim_sampler, in.tex_coords);
     var sim_color = vec3<f32>(tex_color.r * 2.0, 0.0, tex_color.r * 2.0);
+    sim_color += 0.001;
+
     let result = (ambient_color + diffuse_color) * sim_color;
     return vec4<f32>(result, 1.0);
 }

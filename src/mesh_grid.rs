@@ -57,7 +57,6 @@ impl MeshGrid {
         let size = size as i32;
 
         let grid_width = 2.0 * size as f32 * 3.0_f32.sqrt() * 0.5;
-        let grid_height = size as f32 * 3.0 / 2.0 + 1.0;
         let uv_step = 1.0 / grid_width;
 
         for q in -size..=size {

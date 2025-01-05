@@ -1,9 +1,8 @@
 use std::sync::Arc;
 use egui_wgpu::ScreenDescriptor;
-use macaw::vec3;
 use winit::window::Window;
-use crate::camera::{Camera, Projection};
-use crate::{mesh, mesh_grid, simulation};
+use crate::camera::Projection;
+use crate::{mesh, mesh_grid};
 use crate::egui_renderer::EguiRenderer;
 use crate::sim_renderer::SimRenderer;
 use crate::simulation::DIVISIONS;

@@ -1,6 +1,5 @@
 use bytemuck::{Pod, Zeroable};
 use macaw::{Vec2, vec2, Vec3, vec3};
-use wgpu::TextureAspect::Plane2;
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
