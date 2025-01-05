@@ -44,6 +44,9 @@ fn vs_main(
 
 // Fragment shader
 
+const light_pos = vec3<f32>(200.0, 200.0, 200.0);
+const light_color = vec3<f32>(1.0, 1.0, 1.0);
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
      var color = textureSample(sim_texture, sim_sampler, in.tex_coords);

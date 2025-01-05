@@ -40,18 +40,21 @@ struct RenderConfig {
     step_size: f32,
 }
 
+
 #[derive(Copy, Clone)]
 struct CameraConfig {
     rotation_enabled: bool,
+    change_angle: bool,
     rotation_speed: f32,
+    distance: f32,
+    angle: f32,
 }
 
-impl RenderConfig {
-    pub fn differs(&self, other: RenderConfig) -> bool {
-        self.prism_height != other.prism_height ||
-            self.grid_size != other.grid_size ||
-            self.step_size != other.step_size
-    }
+#[derive(Copy, Clone)]
+struct RaindropConfig {
+    enabled: bool,
+    delay: u32,
+    ticks: u32,
 }
 
 struct App<'a> {
@@ -62,6 +65,7 @@ struct App<'a> {
     camera: Camera,
     render_config: RenderConfig,
     camera_config: CameraConfig,
+    raindrop_config: RaindropConfig,
     mouse_position: Vec2,
     show_settings: bool,
 }
@@ -77,13 +81,21 @@ impl App<'_> {
             mouse_position: Vec2::ZERO,
             render_config: RenderConfig {
                 prism_type: PrismType::Hex,
-                prism_height: 1.0,
+                prism_height: 5.0,
                 grid_size: 20,
-                step_size: 1.3,
+                step_size: 3.0,
             },
             camera_config: CameraConfig {
-                rotation_enabled: false,
+                rotation_enabled: true,
+                change_angle: true,
                 rotation_speed: 0.25,
+                distance: 1.1,
+                angle: 20.0,
+            },
+            raindrop_config: RaindropConfig {
+                enabled: true,
+                delay: 250,
+                ticks: 0,
             },
             camera,
             show_settings: true,
@@ -104,7 +116,6 @@ impl App<'_> {
                     position.x as f32 / size.width as f32 * 2.0 - 1.0,
                     -1.0 * (position.y as f32 / size.height as f32 * 2.0 - 1.0),
                 );
-                // println!("mouse coords: {:?}", self.mouse_position);
             }
             WindowEvent::MouseInput { state: Pressed, .. } => {
                 let result = camera::project_screen_onto_plane(self.mouse_position, Plane3::ZX,
@@ -164,7 +175,7 @@ impl App<'_> {
             .open(&mut self.show_settings)
             .show(renderer.egui_renderer.context(), |ui| {
                 ui.label("Simulation");
-                ui.add(egui::Slider::new(&mut self.simulation.damping, 0.0..=1.0).fixed_decimals(3).text("Damping"));
+                ui.add(egui::Slider::new(&mut self.simulation.damping, 0.9..=1.0).fixed_decimals(3).text("Damping"));
 
                 ui.separator();
                 ui.label("Render");
@@ -174,16 +185,18 @@ impl App<'_> {
                     .step_by(1.0)
                     .text("Grid Size")
                     .ui(ui);
-
                 egui::Slider::new(&mut config.step_size, 1.0..=5.0)
                     .text("Step size")
                     .ui(ui);
-
                 egui::Slider::new(&mut config.prism_height, 1.0..=256.0)
                     .text("Prism Height")
                     .ui(ui);
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut config.prism_type, PrismType::Square, "Square");
+                    ui.selectable_value(&mut config.prism_type, PrismType::Hex, "Hexagon");
+                });
 
-                if self.render_config.differs(config) {
+                if self.render_config != config {
                     self.render_config = config;
                     match self.render_config.prism_type {
                         PrismType::Square => {
@@ -203,10 +216,25 @@ impl App<'_> {
 
                 ui.separator();
                 ui.label("Camera");
-
-                egui::Checkbox::new(&mut self.camera_config.rotation_enabled, "Rotation Enabled").ui(ui);
-                egui::Slider::new(&mut self.camera_config.rotation_speed, 0.0..=2.0)
+                ui.horizontal(|ui| {
+                    egui::Checkbox::new(&mut self.camera_config.rotation_enabled, "Rotation Enabled").ui(ui);
+                    egui::Checkbox::new(&mut self.camera_config.change_angle, "Change angle").ui(ui);
+                });
+                egui::Slider::new(&mut self.camera_config.rotation_speed, -1.0..=1.0)
                     .text("Rotation Speed")
+                    .ui(ui);
+                egui::Slider::new(&mut self.camera_config.distance, 0.0..=3.0)
+                    .text("Distance")
+                    .ui(ui);
+                egui::Slider::new(&mut self.camera_config.angle, 0.0..=90.0)
+                    .text("Angle")
+                    .ui(ui);
+
+                ui.separator();
+                ui.label("Raindrops");
+                egui::Checkbox::new(&mut self.raindrop_config.enabled, "Enabled").ui(ui);
+                egui::Slider::new(&mut self.raindrop_config.delay, 0..=1000).integer()
+                    .text("Delay")
                     .ui(ui);
             });
     }
@@ -250,18 +278,41 @@ impl ApplicationHandler for App<'_> {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
-                let step = simulation::PRISM_STEP;
-                let half_length = self.render_config.grid_size as f32 * step / 1.0;
+                let step = self.render_config.step_size;
+                let grid_width = match self.render_config.prism_type {
+                    PrismType::Square => {
+                        self.render_config.grid_size as f32 * self.render_config.step_size
+                    }
+                    PrismType::Hex => {
+                        self.render_config.grid_size as f32 * 2.0 * self.render_config.step_size * 3_f32.sqrt() * 0.5
+                    }
+                };
+                let half_width = grid_width * 0.5;
 
                 let renderer = self.renderer.as_mut().unwrap();
                 if self.camera_config.rotation_enabled {
                     self.rotation += self.camera_config.rotation_speed.to_radians();
                 }
-                let pos = vec3(self.rotation.sin(), 0.0, -self.rotation.cos()) * half_length * 1.5;
+                let pos = vec3(self.rotation.sin(), 0.0, -self.rotation.cos()) * half_width * self.camera_config.distance;
                 self.camera.position = pos;
-                self.camera.position.y = self.render_config.grid_size as f32 + 5.0;/// 2.0;
+                let mut angle = self.camera_config.angle.to_radians();
+                if self.camera_config.change_angle {
+                    angle = angle * (0.6 + 0.4 * self.rotation.sin());
+                }
+                self.camera.position.y = angle.sin() * half_width;
                 renderer.egui_renderer.begin_frame(self.window.as_ref().unwrap());
                 self.render_ui();
+
+                if self.raindrop_config.enabled {
+                    self.raindrop_config.ticks += 1;
+                    if self.raindrop_config.ticks >= self.raindrop_config.delay {
+                        self.raindrop_config.ticks = 0;
+                        self.simulation.poke_normalized(vec2(
+                            rand::random(),
+                            rand::random(),
+                        ));
+                    }
+                }
 
                 use wgpu::SurfaceError as SE;
                 self.simulation.advance();
