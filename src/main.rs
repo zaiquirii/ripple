@@ -40,6 +40,12 @@ struct RenderConfig {
     step_size: f32,
 }
 
+#[derive(Copy, Clone)]
+struct CameraConfig {
+    rotation_enabled: bool,
+    rotation_speed: f32,
+}
+
 impl RenderConfig {
     pub fn differs(&self, other: RenderConfig) -> bool {
         self.prism_height != other.prism_height ||
@@ -55,6 +61,7 @@ struct App<'a> {
     simulation: WaveSimulation,
     camera: Camera,
     render_config: RenderConfig,
+    camera_config: CameraConfig,
     mouse_position: Vec2,
     show_settings: bool,
 }
@@ -69,10 +76,14 @@ impl App<'_> {
             simulation: WaveSimulation::new(simulation::DIVISIONS),
             mouse_position: Vec2::ZERO,
             render_config: RenderConfig {
-                prism_type: PrismType::Square,
+                prism_type: PrismType::Hex,
                 prism_height: 1.0,
-                grid_size: 128,
+                grid_size: 20,
                 step_size: 1.3,
+            },
+            camera_config: CameraConfig {
+                rotation_enabled: false,
+                rotation_speed: 0.25,
             },
             camera,
             show_settings: true,
@@ -97,14 +108,26 @@ impl App<'_> {
             }
             WindowEvent::MouseInput { state: Pressed, .. } => {
                 let result = camera::project_screen_onto_plane(self.mouse_position, Plane3::ZX,
-                                                  renderer.projection.calc_matrix(), self.camera.calc_matrix());
+                                                               renderer.projection.calc_matrix(), self.camera.calc_matrix());
                 if let Some(intersection) = result {
-                    println!("mouse click result: {}", intersection);
-                    let size = self.render_config.grid_size as f32 * self.render_config.step_size;
                     let plane_point = intersection.xz();
-                    let normalized = (plane_point + (size / 2.0)) / size;
-                    println!("normalized: {}", normalized);
-                    self.simulation.poke_normalized(normalized);
+                    println!("mouse click result: {}", plane_point);
+                    if self.render_config.prism_type == PrismType::Square {
+                        let size = self.render_config.grid_size as f32 * self.render_config.step_size;
+                        let normalized = (plane_point + (size / 2.0)) / size;
+                        println!("normalized: {}", normalized);
+                        self.simulation.poke_normalized(normalized);
+                    } else {
+                        let hexes = self.render_config.grid_size as f32 * 2.0 + 1.0;
+                        let grid_width = hexes * self.render_config.step_size * 3.0_f32.sqrt() * 0.5;
+                        println!("grid width: {}", grid_width);
+
+
+                        // let grid_half_width = self.render_config.grid_size as f32 * self.render_config.step_size * 3.0_f32.sqrt();
+                        let normalized = (plane_point + (grid_width / 2.0)) / grid_width;
+                        println!("normalized: {}", normalized);
+                        self.simulation.poke_normalized(normalized);
+                    }
                 }
             }
             WindowEvent::KeyboardInput {
@@ -177,13 +200,15 @@ impl App<'_> {
                         }
                     }
                 }
-            });
-    }
 
-    pub fn update_divisions(&mut self, divisions: usize) {
-        // Update simulation
-        // Update grid
-        //
+                ui.separator();
+                ui.label("Camera");
+
+                egui::Checkbox::new(&mut self.camera_config.rotation_enabled, "Rotation Enabled").ui(ui);
+                egui::Slider::new(&mut self.camera_config.rotation_speed, 0.0..=2.0)
+                    .text("Rotation Speed")
+                    .ui(ui);
+            });
     }
 }
 
@@ -229,10 +254,12 @@ impl ApplicationHandler for App<'_> {
                 let half_length = self.render_config.grid_size as f32 * step / 1.0;
 
                 let renderer = self.renderer.as_mut().unwrap();
-                self.rotation += 0.01;
-                let pos = vec3(self.rotation.sin(), 0.0, -self.rotation.cos()) * half_length;
+                if self.camera_config.rotation_enabled {
+                    self.rotation += self.camera_config.rotation_speed.to_radians();
+                }
+                let pos = vec3(self.rotation.sin(), 0.0, -self.rotation.cos()) * half_length * 1.5;
                 self.camera.position = pos;
-                self.camera.position.y = self.render_config.grid_size as f32 + 2.0;/// 2.0;
+                self.camera.position.y = self.render_config.grid_size as f32 + 5.0;/// 2.0;
                 renderer.egui_renderer.begin_frame(self.window.as_ref().unwrap());
                 self.render_ui();
 

@@ -64,7 +64,9 @@ impl WaveSimulation {
         self.poke(x as usize, y as usize);
     }
 
-    pub fn poke(&mut self, x_start: usize, y_start: usize) {
+    pub fn poke(&mut self, x_mid: usize, y_mid: usize) {
+        let x_start = x_mid.max(2) - 2;
+        let y_start = y_mid.max(2) - 2;
         for y in y_start..(y_start + 5).min(self.divisions) {
             for x in x_start..(x_start + 5).min(self.divisions){
                 let index = y * self.divisions + x;

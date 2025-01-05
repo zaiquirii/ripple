@@ -125,7 +125,7 @@ pub fn hex_prism(height: f32) -> Mesh {
     };
 
     // Pointy top hexagons
-    let w_2 = 3.0_f32.sqrt() * 0.5;
+    let w_2 = 3.0_f32.sqrt() * 0.5 * 0.5;
     let h_2 = 0.5;
 
     // Walls

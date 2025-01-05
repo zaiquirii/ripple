@@ -56,29 +56,22 @@ impl MeshGrid {
         let mut instances = Vec::new();
         let size = size as i32;
 
-        let grid_width = size as f32 * 3.0_f32.sqrt();
+        let grid_width = 2.0 * size as f32 * 3.0_f32.sqrt() * 0.5;
         let grid_height = size as f32 * 3.0 / 2.0 + 1.0;
         let uv_step = 1.0 / grid_width;
 
         for q in -size..=size {
-            for r in (-size.max(-q - size))..=(size.min(-q + size)) {
+            for r in (-size).max(-q - size)..=size.min(-q + size) {
                 let coord_2d = hex_coord_2d(q, r);
                 instances.push(Instance {
                     position: coord_2d * step_size,
                     uv: uvec2(
-                        // ((coord_2d.x + (grid_width * 0.5)) * uv_step * simulation::DIVISIONS as f32) as u32,
-                        // ((coord_2d.y + (grid_height * 0.5)) * uv_step * simulation::DIVISIONS as f32) as u32,
-                        ((coord_2d.x) * uv_step * simulation::DIVISIONS as f32) as u32,
-                        ((coord_2d.y) * uv_step * simulation::DIVISIONS as f32) as u32,
+                        ((coord_2d.x + (grid_width * 0.5)) * uv_step * simulation::DIVISIONS as f32) as u32,
+                        ((coord_2d.y + (grid_width * 0.5)) * uv_step * simulation::DIVISIONS as f32) as u32,
                     ),
                 })
             }
         }
-        instances.sort_by(|l, r| l.position.y.total_cmp(&r.position.y));
-        for i in &instances {
-            println!("height: {}", i.position.y)
-        }
-        println!("grid: {} {}", grid_width, grid_height);
 
         Self {
             instances
@@ -102,9 +95,9 @@ impl MeshGrid {
 
 fn hex_coord_2d(q: i32, r: i32) -> Vec2 {
     return vec2(
-        3.0_f32.sqrt() * q as f32 + 3.0_f32.sqrt() / 2.0 * r as f32,
-        3.0 / 2.0 * r as f32 / 2.0,
-    );
+        3.0_f32.sqrt() * q as f32 + 3.0_f32.sqrt() * 0.5 * r as f32,
+        1.5 * r as f32,
+    ) * 0.5;
 }
 
 pub struct UploadedMeshGrid {
