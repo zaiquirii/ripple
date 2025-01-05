@@ -51,6 +51,40 @@ impl MeshGrid {
         }
     }
 
+    pub fn hex_grid(size: usize, step_size: f32) -> Self {
+        // Following algo from: https://www.redblobgames.com/grids/hexagons/#range
+        let mut instances = Vec::new();
+        let size = size as i32;
+
+        let grid_width = size as f32 * 3.0_f32.sqrt();
+        let grid_height = size as f32 * 3.0 / 2.0 + 1.0;
+        let uv_step = 1.0 / grid_width;
+
+        for q in -size..=size {
+            for r in (-size.max(-q - size))..=(size.min(-q + size)) {
+                let coord_2d = hex_coord_2d(q, r);
+                instances.push(Instance {
+                    position: coord_2d * step_size,
+                    uv: uvec2(
+                        // ((coord_2d.x + (grid_width * 0.5)) * uv_step * simulation::DIVISIONS as f32) as u32,
+                        // ((coord_2d.y + (grid_height * 0.5)) * uv_step * simulation::DIVISIONS as f32) as u32,
+                        ((coord_2d.x) * uv_step * simulation::DIVISIONS as f32) as u32,
+                        ((coord_2d.y) * uv_step * simulation::DIVISIONS as f32) as u32,
+                    ),
+                })
+            }
+        }
+        instances.sort_by(|l, r| l.position.y.total_cmp(&r.position.y));
+        for i in &instances {
+            println!("height: {}", i.position.y)
+        }
+        println!("grid: {} {}", grid_width, grid_height);
+
+        Self {
+            instances
+        }
+    }
+
     pub fn push_to_device(&self, device: &wgpu::Device) -> UploadedMeshGrid {
         let instance_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -64,6 +98,13 @@ impl MeshGrid {
             instance_count: self.instances.len() as u32,
         }
     }
+}
+
+fn hex_coord_2d(q: i32, r: i32) -> Vec2 {
+    return vec2(
+        3.0_f32.sqrt() * q as f32 + 3.0_f32.sqrt() / 2.0 * r as f32,
+        3.0 / 2.0 * r as f32 / 2.0,
+    );
 }
 
 pub struct UploadedMeshGrid {

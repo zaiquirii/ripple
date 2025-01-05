@@ -1,4 +1,4 @@
-use macaw::{Vec3, vec3};
+use macaw::{Vec2, vec2, Vec3, vec3};
 use wgpu::util::DeviceExt;
 
 #[derive(Default, Debug)]
@@ -22,6 +22,44 @@ impl Mesh {
         ];
         for i in indices {
             self.indices.push(i + start_index)
+        }
+    }
+
+    pub fn push_vert_quad(&mut self, start: Vec2, end: Vec2, height: f32) {
+        self.push_quad(
+            vec3(start.x, 0.0, start.y),
+            vec3(start.x, -height, start.y),
+            vec3(end.x, -height, end.y),
+            vec3(end.x, 0.0, end.y),
+        )
+    }
+
+    pub fn push_vert_walls(&mut self, points: &[Vec2], height: f32) {
+        for window in points.windows(2) {
+            self.push_vert_quad(window[0], window[1], height);
+        }
+        self.push_vert_quad(*points.last().unwrap(), points[0], height);
+    }
+
+    pub fn push_tri(&mut self, p0: Vec3, p1: Vec3, p2: Vec3) {
+        let start_index = self.vertices.len() as u32;
+        self.vertices.push(p0);
+        self.vertices.push(p1);
+        self.vertices.push(p2);
+
+        self.indices.push(start_index);
+        self.indices.push(start_index + 1);
+        self.indices.push(start_index + 2);
+    }
+
+    pub fn push_polygon(&mut self, points: &[Vec2]) {
+        let start = points[0];
+        for window in points[1..].windows(2) {
+            self.push_tri(
+                vec3(start.x, 0.0, start.y),
+                vec3(window[0].x, 0.0, window[0].y),
+                vec3(window[1].x, 0.0, window[1].y),
+            )
         }
     }
 
@@ -62,18 +100,45 @@ pub fn square_prism(height: f32) -> Mesh {
         indices: Vec::new(),
     };
 
-    // front back (Z swaps)
-    mesh.push_quad(vec3(0.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0), vec3(1.0, 1.0, 0.0), vec3(0.0, height, 0.0));
-    mesh.push_quad(vec3(0.0, 0.0, 1.0), vec3(0.0, height, 1.0), vec3(1.0, height, 1.0), vec3(1.0, 0.0, 1.0));
-
-    // left right (X swaps)
-    mesh.push_quad(vec3(0.0, 0.0, 0.0), vec3(0.0, height, 0.0), vec3(0.0, height, 1.0), vec3(0.0, 0.0, 1.0));
-    mesh.push_quad(vec3(1.0, 0.0, 0.0), vec3(1.0, 0.0, 1.0), vec3(1.0, height, 1.0), vec3(1.0, height, 0.0));
+    // Walls
+    mesh.push_vert_walls(
+        &vec![
+            vec2(0.0, 0.0),
+            vec2(1.0, 0.0),
+            vec2(1.0, 1.0),
+            vec2(0.0, 1.0),
+        ],
+        height,
+    );
 
     // top bottom (Y swaps)
-    mesh.push_quad(vec3(0.0, 0.0, 0.0), vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0));
-    mesh.push_quad(vec3(0.0, height, 0.0), vec3(1.0, height, 0.0), vec3(1.0, height, 1.0), vec3(0.0, height, 1.0));
+    mesh.push_quad(vec3(0.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0), vec3(1.0, 0.0, 1.0), vec3(0.0, 0.0, 1.0));
+    mesh.push_quad(vec3(0.0, height, 0.0), vec3(0.0, height, 1.0), vec3(1.0, height, 1.0), vec3(1.0, height, 0.0));
 
+    mesh
+}
+
+pub fn hex_prism(height: f32) -> Mesh {
+    let mut mesh = Mesh {
+        vertices: Vec::new(),
+        indices: Vec::new(),
+    };
+
+    // Pointy top hexagons
+    let w_2 = 3.0_f32.sqrt() * 0.5;
+    let h_2 = 0.5;
+
+    // Walls
+    let points = vec![
+        vec2(0.0, h_2),
+        vec2(-w_2, h_2 / 2.0),
+        vec2(-w_2, h_2 / -2.0),
+        vec2(0.0, -h_2),
+        vec2(w_2, h_2 / -2.0),
+        vec2(w_2, h_2 / 2.0),
+    ];
+    mesh.push_vert_walls(&points, height);
+    mesh.push_polygon(&points);
     mesh
 }
 

@@ -18,6 +18,7 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) color: vec3<f32>,
+    @location(1) tex_coords: vec2<f32>,
 }
 
 @vertex
@@ -28,7 +29,7 @@ fn vs_main(
     var position = model.vertex;
     position.x += model.position.x;
     position.z += model.position.y;
-    position.y += sim_cell.r * 10.0;
+    position.y += sim_cell.r * 15.0;
 
 
     var out: VertexOutput;
@@ -36,7 +37,7 @@ fn vs_main(
 //    out.color = model.color;
 //    out.color = vec3<f32>(f32(model.sim_coord.x) / 128.0, f32(model.sim_coord.y) / 128.0, 0.0);
 //    out.color = vec3<f32>(sim_cell.r, sim_cell.g, 0.0);
-//    out.tex_coords = vec2<f32>(model.vertex.xy);
+    out.tex_coords= vec2<f32>(f32(model.sim_coord.x) / 128.0, f32(model.sim_coord.y) / 128.0);
     out.clip_position = camera.view_proj * vec4<f32>(position, 1.0);
     return out;
 }

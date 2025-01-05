@@ -16,16 +16,19 @@ pub struct GfxState<'a> {
     pub size: winit::dpi::PhysicalSize<u32>,
     pub window: Arc<Window>,
 
-    pub camera: Camera,
     pub(crate) projection: Projection,
 
     pub sim: SimRenderer,
     pub egui_renderer: EguiRenderer,
-    pub(crate) scale_factor: f32,
 }
 
 impl<'a> GfxState<'a> {
-    pub(crate) async fn new(window: Arc<Window>, fov_y: f32) -> GfxState<'a> {
+    pub(crate) async fn new(
+        window: Arc<Window>,
+        fov_y: f32,
+        prism: &mesh::Mesh,
+        grid: &mesh_grid::MeshGrid,
+    ) -> GfxState<'a> {
         let size = window.inner_size();
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -67,12 +70,9 @@ impl<'a> GfxState<'a> {
 
         let egui_renderer = EguiRenderer::new(&device, config.format, None, 1, &window);
         let projection = Projection::new(size.width, size.height, fov_y, 0.1, 10000.0);
-        let camera = Camera::new(vec3(0.0, 0.0, -1.0), vec3(0.0, 0.0, 0.0));
 
         surface.configure(&device, &config);
-        let cube = mesh::square_prism(1.0);
-        let grid = mesh_grid::MeshGrid::square_grid(simulation::PRISM_SIZE as usize, simulation::PRISM_STEP);
-        let sim = SimRenderer::new(&device, &config, &cube, &grid, DIVISIONS);
+        let sim = SimRenderer::new(&device, &config, &prism, &grid, DIVISIONS);
 
         Self {
             window,
@@ -82,12 +82,10 @@ impl<'a> GfxState<'a> {
             config,
             size,
 
-            camera,
             projection,
 
             sim,
             egui_renderer,
-            scale_factor: 1.0,
         }
     }
 
@@ -123,7 +121,7 @@ impl<'a> GfxState<'a> {
     ) {
         let screen_descriptor = ScreenDescriptor {
             size_in_pixels: [self.size.width, self.size.height],
-            pixels_per_point: self.window.scale_factor() as f32 * self.scale_factor,
+            pixels_per_point: self.window.scale_factor() as f32,
         };
         let window = self.window.as_ref();
         self.egui_renderer.end_frame_and_draw(
