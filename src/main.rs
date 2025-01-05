@@ -48,6 +48,7 @@ struct CameraConfig {
     rotation_speed: f32,
     distance: f32,
     angle: f32,
+    target_ratio: f32,
 }
 
 #[derive(Copy, Clone)]
@@ -82,15 +83,16 @@ impl App<'_> {
             render_config: RenderConfig {
                 prism_type: PrismType::Hex,
                 prism_height: 5.0,
-                grid_size: 20,
-                step_size: 3.0,
+                grid_size: 16,
+                step_size: 1.0,
             },
             camera_config: CameraConfig {
                 rotation_enabled: true,
-                change_angle: true,
-                rotation_speed: 0.25,
+                change_angle: false,
+                rotation_speed: 0.10,
                 distance: 1.1,
                 angle: 20.0,
+                target_ratio: 0.0,
             },
             raindrop_config: RaindropConfig {
                 enabled: true,
@@ -229,6 +231,10 @@ impl App<'_> {
                 egui::Slider::new(&mut self.camera_config.angle, 0.0..=90.0)
                     .text("Angle")
                     .ui(ui);
+                egui::Slider::new(&mut self.camera_config.target_ratio, -1.0..=1.0)
+                    .text("Target ratio")
+                    .ui(ui);
+
 
                 ui.separator();
                 ui.label("Raindrops");
@@ -278,7 +284,6 @@ impl ApplicationHandler for App<'_> {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
-                let step = self.render_config.step_size;
                 let grid_width = match self.render_config.prism_type {
                     PrismType::Square => {
                         self.render_config.grid_size as f32 * self.render_config.step_size
@@ -294,6 +299,7 @@ impl ApplicationHandler for App<'_> {
                     self.rotation += self.camera_config.rotation_speed.to_radians();
                 }
                 let pos = vec3(self.rotation.sin(), 0.0, -self.rotation.cos()) * half_width * self.camera_config.distance;
+                self.camera.target = pos * self.camera_config.target_ratio;
                 self.camera.position = pos;
                 let mut angle = self.camera_config.angle.to_radians();
                 if self.camera_config.change_angle {

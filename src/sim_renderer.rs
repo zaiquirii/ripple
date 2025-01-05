@@ -4,6 +4,8 @@ use crate::mesh::{Mesh, UploadedMesh};
 use crate::mesh_grid::{MeshGrid, UploadedMeshGrid};
 use crate::{mesh, mesh_grid, texture};
 
+const CLEAR_COLOR: f64 = 0.0001;
+
 pub enum RenderMode {
     Texture,
     Prism,
@@ -330,9 +332,9 @@ impl PipelinePrism {
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.05,
-                        g: 0.05,
-                        b: 0.05,
+                        r: CLEAR_COLOR,
+                        g: CLEAR_COLOR,
+                        b: CLEAR_COLOR,
                         a: 1.0,
                     }),
                     store: wgpu::StoreOp::Store,

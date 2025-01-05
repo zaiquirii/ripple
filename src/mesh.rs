@@ -1,20 +1,37 @@
+use bytemuck::{Pod, Zeroable};
 use macaw::{Vec2, vec2, Vec3, vec3};
+use wgpu::TextureAspect::Plane2;
 use wgpu::util::DeviceExt;
+
+#[repr(C)]
+#[derive(Copy, Clone, Default, Debug, Pod, Zeroable)]
+pub struct Vertex {
+    position: Vec3,
+    normal: Vec3,
+}
+
+fn vertex(position: Vec3, normal: Vec3) -> Vertex {
+    Vertex {
+        position,
+        normal,
+    }
+}
 
 #[derive(Default, Debug)]
 pub struct Mesh {
-    pub vertices: Vec<Vec3>,
+    pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
 }
 
 impl Mesh {
     // points need to be defined CCW
     pub fn push_quad(&mut self, p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3) {
+        let normal = (p2 - p0).cross(p1 - p0).normalize();
         let start_index = self.vertices.len() as u32;
-        self.vertices.push(p0);
-        self.vertices.push(p1);
-        self.vertices.push(p2);
-        self.vertices.push(p3);
+        self.vertices.push(vertex(p0, normal));
+        self.vertices.push(vertex(p1, normal));
+        self.vertices.push(vertex(p2, normal));
+        self.vertices.push(vertex(p3, normal));
 
         let indices: [u32; 6] = [
             0, 1, 3,
@@ -42,10 +59,11 @@ impl Mesh {
     }
 
     pub fn push_tri(&mut self, p0: Vec3, p1: Vec3, p2: Vec3) {
+        let normal = (p2 - p0).cross(p1 - p0).normalize();
         let start_index = self.vertices.len() as u32;
-        self.vertices.push(p0);
-        self.vertices.push(p1);
-        self.vertices.push(p2);
+        self.vertices.push(vertex(p0, normal));
+        self.vertices.push(vertex(p1, normal));
+        self.vertices.push(vertex(p2, normal));
 
         self.indices.push(start_index);
         self.indices.push(start_index + 1);
@@ -101,19 +119,14 @@ pub fn square_prism(height: f32) -> Mesh {
     };
 
     // Walls
-    mesh.push_vert_walls(
-        &vec![
-            vec2(0.0, 0.0),
-            vec2(1.0, 0.0),
-            vec2(1.0, 1.0),
-            vec2(0.0, 1.0),
-        ],
-        height,
-    );
-
-    // top bottom (Y swaps)
-    mesh.push_quad(vec3(0.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0), vec3(1.0, 0.0, 1.0), vec3(0.0, 0.0, 1.0));
-    mesh.push_quad(vec3(0.0, height, 0.0), vec3(0.0, height, 1.0), vec3(1.0, height, 1.0), vec3(1.0, height, 0.0));
+    let points = vec![
+        vec2(0.0, 0.0),
+        vec2(1.0, 0.0),
+        vec2(1.0, 1.0),
+        vec2(0.0, 1.0),
+    ];
+    mesh.push_vert_walls(&points, height);
+    mesh.push_polygon(&points);
 
     mesh
 }
@@ -142,13 +155,14 @@ pub fn hex_prism(height: f32) -> Mesh {
     mesh
 }
 
-const VERTEX_ATTRIB: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![
+const VERTEX_ATTRIB: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
     0 => Float32x3,
+    3 => Float32x3,
 ];
 
 pub fn vertex_desc() -> wgpu::VertexBufferLayout<'static> {
     wgpu::VertexBufferLayout {
-        array_stride: std::mem::size_of::<Vec3>() as wgpu::BufferAddress,
+        array_stride: size_of::<Vertex>() as wgpu::BufferAddress,
         step_mode: wgpu::VertexStepMode::Vertex,
         attributes: &VERTEX_ATTRIB,
     }
